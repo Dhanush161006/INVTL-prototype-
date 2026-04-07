@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RunoPoly - Run. Claim. Defend.</title>
+<style>
+body { margin: 0; font-family: Arial; background: #0f172a; color: white; text-align: center; }
+h1 { margin: 10px; }
+#controls { margin: 10px; }
+button { padding: 10px 20px; margin: 5px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
+#start { background: #22c55e; }
+#end { background: #ef4444; }
+#steal { background: #f59e0b; }
+
+#map { width: 520px; height: 520px; margin: auto; border-radius: 12px; background: #020617; }
+
+#grid {
+  display: grid;
+  grid-template-columns: repeat(20, 25px);
+  grid-template-rows: repeat(20, 25px);
+  gap: 1px;
+}
+
+.cell { width: 25px; height: 25px; background: #1e293b; }
+.path { background: yellow !important; }
+.claimed { background: #3b82f6 !important; }
+.enemy { background: #ef4444 !important; }
+.filled { background: rgba(59,130,246,0.4) !important; }
+.locked { outline: 2px solid #22c55e; }
+
+#leaderboard { margin-top: 20px; }
+</style>
+</head>
+<body>
+
+<h1>🏃 RunoPoly</h1>
+<p>Run. Claim. Defend.</p>
+
+<div id="controls">
+  <button id="start">Start Run</button>
+  <button id="end">End Run</button>
+  <button id="steal">Steal Mode</button>
+</div>
+
+<div id="map"><div id="grid"></div></div>
+
+<div id="leaderboard">
+  <h3>Status</h3>
+  <p>Owned: <span id="score">0</span> cells</p>
+  <p>Defense: <span id="timer">None</span></p>
+  <p>Mode: <span id="mode">Normal</span></p>
+</div>
+
+<script>
+const grid = document.getElementById("grid");
+const size = 20;
+let path = [];
+let claimedCells = new Set();
+let enemyCells = new Set();
+let defenseEndTime = null;
+let timerInterval = null;
+let stealMode = false;
+
+for (let i = 0; i < size * size; i++) {
+  const cell = document.createElement("div");
+  cell.classList.add("cell");
+  grid.appendChild(cell);
+}
+
+function generateAutoPath() {
+  clearGrid();
+  path = [];
+
+  let startX = Math.floor(Math.random() * 10);
+  let startY = Math.floor(Math.random() * 10);
+  let width = 4 + Math.floor(Math.random() * 5);
+  let height = 4 + Math.floor(Math.random() * 5);
+
+  for (let x = startX; x <= startX + width; x++) path.push(startY * size + x);
+  for (let y = startY + 1; y <= startY + height; y++) path.push(y * size + (startX + width));
+  for (let x = startX + width - 1; x >= startX; x--) path.push((startY + height) * size + x);
+  for (let y = startY + height - 1; y > startY; y--) path.push(y * size + startX);
+
+  path.push(path[0]);
+  drawPath();
+}
+
+function drawPath() {
+  path.forEach(i => grid.children[i].classList.add("path"));
+}
+
+function fillArea(isEnemy = false) {
+  let xs = path.map(i => i % size);
+  let ys = path.map(i => Math.floor(i / size));
+
+  let minX = Math.min(...xs);
+  let maxX = Math.max(...xs);
+  let minY = Math.min(...ys);
+  let maxY = Math.max(...ys);
+
+  for (let y = minY; y <= maxY; y++) {
+    for (let x = minX; x <= maxX; x++) {
+      let idx = y * size + x;
+
+      if (isEnemy) {
+        if (!grid.children[idx].classList.contains("locked")) {
+          grid.children[idx].classList.remove("claimed");
+          grid.children[idx].classList.add("enemy");
+          enemyCells.add(idx);
+          claimedCells.delete(idx);
+        }
+      } else {
+        grid.children[idx].classList.add("filled", "locked");
+        claimedCells.add(idx);
+      }
+    }
+  }
+}
+
+function startDefenseTimer() {
+  defenseEndTime = Date.now() + (12 * 60 * 60 * 1000);
+
+  if (timerInterval) clearInterval(timerInterval);
+
+  timerInterval = setInterval(() => {
+    let remaining = defenseEndTime - Date.now();
+
+    if (remaining <= 0) {
+      clearInterval(timerInterval);
+      document.getElementById("timer").innerText = "Vulnerable";
+      removeLock();
+      return;
+    }
+
+    let hrs = Math.floor(remaining / (1000 * 60 * 60));
+    let mins = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
+    let secs = Math.floor((remaining % (1000 * 60)) / 1000);
+
+    document.getElementById("timer").innerText = `${hrs}h ${mins}m ${secs}s`;
+  }, 1000);
+}
+
+function removeLock() {
+  for (let i = 0; i < size * size; i++) {
+    grid.children[i].classList.remove("locked");
+  }
+}
+
+// controls
+
+document.getElementById("start").onclick = () => {
+  generateAutoPath();
+};
+
+document.getElementById("end").onclick = () => {
+  if (stealMode) {
+    fillArea(true);
+  } else {
+    path.forEach(i => {
+      grid.children[i].classList.remove("path");
+      grid.children[i].classList.add("claimed");
+      claimedCells.add(i);
+    });
+
+    fillArea(false);
+    startDefenseTimer();
+  }
+
+  updateScore();
+};
+
+document.getElementById("steal").onclick = () => {
+  stealMode = !stealMode;
+  document.getElementById("mode").innerText = stealMode ? "Steal Mode" : "Normal";
+};
+
+function clearGrid() {
+  for (let i = 0; i < size * size; i++) {
+    grid.children[i].classList.remove("path");
+  }
+}
+
+function updateScore() {
+  document.getElementById("score").innerText = claimedCells.size;
+}
+</script>
+
+</body>
+</html>
